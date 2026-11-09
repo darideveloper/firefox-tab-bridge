@@ -1,0 +1,34 @@
+{
+  "manifest_version": 2,
+  "name": "ff-tab-bridge",
+  "version": "0.0.1",
+  "description": "Local bridge that lets opencode drive an attached Firefox tab.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "ff-tab-bridge@darideveloper",
+      "strict_min_version": "128.0"
+    }
+  },
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "webNavigation"
+  ],
+  "optional_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "scripts": [
+      "background.js"
+    ],
+    "persistent": true
+  },
+  "browser_action": {
+    "default_title": "Attach this tab"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  }
+}
