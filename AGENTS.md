@@ -1,8 +1,8 @@
-<!-- ai-daridev:start -->
+<!-- daridev:start -->
 - odoo_project: firefox-tab-bridge
 - odoo_stage_done: Sprint Complete
 - card_tag: script
-<!-- ai-daridev:end -->
+<!-- daridev:end -->
 
 # ff-tab-bridge
 
