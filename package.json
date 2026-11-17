@@ -1,10 +1,15 @@
 {
   "name": "ff-tab-bridge",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Let opencode drive Firefox tabs you explicitly attach.",
   "license": "MIT",
+  "scripts": {
+    "server": "bun run server/server.ts",
+    "fixture": "bun run test/fixture/serve.ts",
+    "test": "bun test"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "zod": "^4.6.7"

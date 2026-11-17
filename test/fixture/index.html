@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>ff-tab-bridge fixture</title>
+    <style>
+      body { font: 16px/1.5 system-ui, sans-serif; margin: 0 auto; max-width: 44rem; padding: 1.5rem; }
+      label { display: block; margin: 1rem 0 0.25rem; font-weight: 600; }
+      input, select, button, textarea { font: inherit; padding: 0.35rem 0.5rem; }
+      button { cursor: pointer; }
+      .spacer { height: 130vh; background: linear-gradient(#f4f4f4, #ffffff); }
+      .box { border: 1px solid #ccc; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>ff-tab-bridge fixture</h1>
+    <p>
+      Controls for the options-page self-test. Serve it over HTTP (<code>bun run fixture</code>) so
+      Firefox grants host access, then attach the tab with the toolbar button.
+    </p>
+
+    <div class="box">
+      <label for="name">Name</label>
+      <input id="name" type="text" placeholder="Type here" />
+      <label for="colour">Colour</label>
+      <select id="colour">
+        <option value="red">Red</option>
+        <option value="green">Green</option>
+        <option value="blue">Blue</option>
+      </select>
+      <label for="notes">Notes</label>
+      <textarea id="notes" rows="2"></textarea>
+      <div class="spacer" style="height: 1rem"></div>
+      <button id="clickme" type="button">Count a click</button>
+      <output id="count">0</output>
+    </div>
+
+    <div class="box">
+      <h2>Side effects</h2>
+      <button id="console" type="button">Write to console</button>
+      <button id="network" type="button">Make a request</button>
+      <button id="dialog" type="button">Ask to delete</button>
+      <button id="delay" type="button">Load after a delay</button>
+      <output id="result"></output>
+      <div id="list"></div>
+    </div>
+
+    <div class="box">
+      <h2>Closed shadow root</h2>
+      <div id="shadow"></div>
+    </div>
+
+    <div class="box">
+      <h2>Upload</h2>
+      <label for="file">Attach a file</label>
+      <input id="file" type="file" />
+      <output id="filename"></output>
+    </div>
+
+    <div class="spacer"></div>
+    <h2>Tall page</h2>
+    <p>Full-page screenshots stitch the scroll tiles down to here.</p>
+
+    <script>
+      let clicks = 0;
+      document.getElementById('clickme').addEventListener('click', () => {
+        clicks += 1;
+        document.getElementById('count').textContent = String(clicks);
+      });
+
+      document.getElementById('console').addEventListener('click', () => {
+        console.log('fixture console line', { clicks });
+        console.warn('fixture warning');
+      });
+
+      document.getElementById('network').addEventListener('click', () => {
+        fetch('data:text/plain,ok').then((response) => {
+          document.getElementById('result').textContent = 'request status ' + response.status;
+        });
+      });
+
+      document.getElementById('dialog').addEventListener('click', () => {
+        const answer = confirm('Delete the fixture row?');
+        document.getElementById('result').textContent = 'confirm returned ' + answer;
+      });
+
+      document.getElementById('delay').addEventListener('click', () => {
+        setTimeout(() => {
+          const row = document.createElement('div');
+          row.id = 'delayed-row';
+          row.textContent = 'loaded after delay';
+          document.getElementById('list').append(row);
+        }, 500);
+      });
+
+      const host = document.getElementById('shadow');
+      const root = host.attachShadow({ mode: 'closed' });
+      const shadowButton = document.createElement('button');
+      shadowButton.textContent = 'Inner shadow action';
+      shadowButton.id = 'shadow-action';
+      const shadowInput = document.createElement('input');
+      shadowInput.id = 'shadow-input';
+      shadowInput.placeholder = 'shadow input';
+      root.append(shadowButton, shadowInput);
+
+      document.getElementById('file').addEventListener('change', (event) => {
+        const file = event.target.files && event.target.files[0];
+        document.getElementById('filename').textContent = file ? file.name + ' (' + file.size + ' bytes)' : 'none';
+      });
+    </script>
+  </body>
+</html>

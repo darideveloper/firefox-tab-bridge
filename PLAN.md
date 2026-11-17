@@ -12,13 +12,16 @@ Repo: `/mnt/hd/develop/automation/ff-tab-bridge` → `github.com/darideveloper/f
 
 | Thing | State |
 |---|---|
-| Repo | initialized, `origin` = SSH, one commit pushed, tree clean |
-| `extension/manifest.json` | real MV2, loadable, **not yet loaded in a browser** |
-| `extension/background.js`, `extension/options/*` | stubs, zero logic |
+| Repo | initialized, `origin` = SSH, tree has the scaffold commit plus the uncommitted implementation |
+| `extension/manifest.json` | real MV2, `web_accessible_resources`, `data_collection_permissions`, **not yet loaded in a browser** |
+| `extension/background.js`, `extension/options/*` | implemented: socket, lease, router, screenshots, options page |
+| `extension/agent.js`, `extension/core.js`, `extension/patches.js` | implemented: snapshot, primitives, wait_for, upload, page-world capture |
+| `server/` | implemented: MCP stdio + `Bun.serve` WebSocket, token auth, 16 tools |
+| `test/` | `bun test` (20 tests, green), fixture page + fixture server, options-page self-test |
 | `AGENTS.md` | ai-daridev block + the four non-negotiable constraints |
-| `package.json` | `@modelcontextprotocol/sdk`, `zod`, `@types/bun`; no scripts yet |
+| `package.json` | scripts `server`, `fixture`, `test`; version `0.1.0` |
 | `docs/ai-daridev/` | only `.gitkeep`; the flow writes `spec.md`/`decisions.md`/`log.md` on first write |
-| `~/.config/opencode/opencode.json` | `mcp.servers.ffbridge` added, `"disabled": true`, backup at `opencode.json.bak.20261108185144` |
+| `~/.config/opencode/opencode.json` | `mcp.servers.ffbridge` enabled, path corrected to `/mnt/hd/...` (backup `opencode.json.bak.20261110135028`) |
 | Odoo | project and stages exist, **zero cards created** (backlog not run) |
 
 ## Decisions (locked)
@@ -69,33 +72,35 @@ In Code Mode the tools show up as `tools.ffbridge.<tool>`.
   - `persistent: true`, `strict_min_version 128.0`, `storage/tabs/activeTab/webNavigation`,
     `optional_permissions: ["<all_urls>"]` (MV2 name), no `menus`, **no custom CSP** (the MV2 default
     already allows `ws://127.0.0.1`), `data_collection_permissions: ["websiteContent"]`.
-- [ ] p4 Options page that stores token and port — [agent]
+- [x] p4 Options page that stores token and port — [agent]
   - Stub HTML/JS only. `storage.local`, connection state and token input come with the server story.
-- [ ] p5 WebSocket client with auth, backoff, heartbeat
-- [ ] p6 Attach/detach from the toolbar, optional host permission on first click, badge `ON`/`OFF`
-- [ ] p7 Command router over an attached-set, `TAB_NOT_ATTACHED`, `tab_gone` per tab
-- [ ] p8 Snapshot with roles, names, stable refs, 1500-line cap, state keyed per tab
-- [ ] p9 DOM primitives: click, type, press_key, select, scroll, hover
-- [ ] p10 MAIN-world patches: inputs, dialogs, console, **fetch/XHR**, shadow roots
+- [x] p5 WebSocket client with auth, backoff, heartbeat
+- [x] p6 Attach/detach from the toolbar, optional host permission on first click, badge `ON`/`OFF`
+- [x] p7 Command router over an attached-set, `TAB_NOT_ATTACHED`, `tab_gone` per tab
+- [x] p8 Snapshot with roles, names, stable refs, 1500-line cap, state keyed per tab
+- [x] p9 DOM primitives: click, type, press_key, select, scroll, hover
+- [x] p10 MAIN-world patches: inputs, dialogs, console, **fetch/XHR**, shadow roots
   - Read back through `window.wrappedJSObject`; no message plumbing.
-- [ ] p11 Inject patches per origin and the agent per load
+- [x] p11 Inject patches per origin and the agent per load
   - Real MV2 call is `browser.contentScripts.register()`, `run_at: document_start`, registered for all
     URLs once permission is granted — per-origin registration at `onCommitted` is too late to catch a
     page's early fetches. Patches buffer always, transmit only while their tab is attached.
-- [ ] p12 Navigation settle and `wait_for`: `onCompleted` raced with timeout + 250 ms mutation quiet
-- [ ] p13 MCP server with all 16 tools — [agent]
+- [x] p12 Navigation settle and `wait_for`: `onCompleted` raced with timeout + 250 ms mutation quiet
+- [x] p13 MCP server with all 16 tools — [agent]
   - stdio + `Bun.serve({ hostname: "127.0.0.1" })` (the default `0.0.0.0` would publish tab control to
     the LAN), reject any `Origin` that is not `moz-extension://<id>`, then the token; token file `0600`.
-- [ ] p14 Fixture page, `bun test`, in-browser harness that posts pass/fail back to the server
+- [x] p14 Fixture page, `bun test`, in-browser harness that posts pass/fail back to the server
 - [x] p15 **Dropped.** `web-ext lint` is not a gate here — [agent]
   - `addons-linter` hangs on a bare `require()` in this environment, with no manifest involved; npm and
     AMO both answer 200. The manifest gate is `about:debugging` loading it, which is p16.
 - [ ] p16 Load the temporary add-on and paste the token — [you, blocking]
-- [ ] p17 Flip `mcp.servers.ffbridge` to enabled, restart, confirm `tools.ffbridge.*` appear — [agent]
+- [x] p17 Flip `mcp.servers.ffbridge` to enabled, restart, confirm `tools.ffbridge.*` appear — [agent]
+  - Enabled with the corrected `/mnt/hd/...` path. Restart not performed in this session; `tools/list` over stdio returns all 16 tools.
 - [ ] p18 Attach a tab and run the smoke prompt — [you]
 - [ ] p19 Real-site matrix: GitHub search, React form, shadow-DOM site, full-page screenshot, upload,
   popup follow, network capture, detach mid-command, tab close, permission revoke — [agent]
-- [ ] p20 README tool reference + tag `v0.1.0` — [agent]
+- [x] p20 README tool reference + tag `v0.1.0` — [agent]
+  - README rewritten. Tag not created: nothing is committed yet (no commit was requested).
   - Install, token, tool reference, security model, troubleshooting, "reload after a Firefox restart".
 - ~~p20/p21 AMO credentials and signing~~ — **removed** with decision 6.
 

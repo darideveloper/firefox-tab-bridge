@@ -3,10 +3,130 @@
   <head>
     <meta charset="utf-8" />
     <title>ff-tab-bridge</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --line: #c9c9c9;
+        --muted: #6b6b6b;
+        --ok: #2b8a3e;
+        --bad: #a61e1e;
+      }
+      body {
+        font: 15px/1.5 system-ui, sans-serif;
+        margin: 0 auto;
+        max-width: 46rem;
+        padding: 2rem 1.25rem 4rem;
+      }
+      h1 {
+        font-size: 1.4rem;
+        margin: 0 0 0.25rem;
+      }
+      p.lede {
+        color: var(--muted);
+        margin-top: 0;
+      }
+      fieldset {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        margin: 1.5rem 0;
+        padding: 1rem 1.25rem 1.25rem;
+      }
+      legend {
+        font-weight: 600;
+        padding: 0 0.4rem;
+      }
+      label {
+        display: block;
+        font-weight: 600;
+        margin: 0.75rem 0 0.25rem;
+      }
+      input {
+        box-sizing: border-box;
+        font: inherit;
+        padding: 0.45rem 0.6rem;
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+      }
+      input#port {
+        max-width: 9rem;
+      }
+      .row {
+        align-items: center;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-top: 1rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.45rem 1rem;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
+      }
+      button.primary {
+        background: #1c7ed6;
+        border-color: #1c7ed6;
+        color: #fff;
+      }
+      #status {
+        font-variant-numeric: tabular-nums;
+      }
+      .ok {
+        color: var(--ok);
+      }
+      .bad {
+        color: var(--bad);
+      }
+      code {
+        background: rgba(127, 127, 127, 0.15);
+        border-radius: 4px;
+        padding: 0.1rem 0.3rem;
+      }
+      ol#results {
+        padding-left: 1.25rem;
+      }
+      ol#results li {
+        margin: 0.2rem 0;
+      }
+      .hint {
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+    </style>
   </head>
   <body>
     <h1>ff-tab-bridge</h1>
-    <p>Nothing to configure yet.</p>
+    <p class="lede">Drive Firefox tabs you attach, from opencode. Nothing is read until a tab is attached.</p>
+
+    <fieldset>
+      <legend>Server</legend>
+      <label for="port">Port</label>
+      <input id="port" type="number" min="1" max="65535" step="1" value="8788" />
+      <label for="token">Token</label>
+      <input id="token" type="text" spellcheck="false" autocomplete="off" placeholder="paste the token printed by the server" />
+      <p class="hint">
+        The server writes the token to <code>~/.config/ff-tab-bridge/token</code> (mode 0600) the first time it starts.
+      </p>
+      <div class="row">
+        <button class="primary" id="save">Save and reconnect</button>
+        <span id="saved"></span>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Status</legend>
+      <p id="status">checking…</p>
+      <div class="row">
+        <button id="attach">Attach or detach the active tab</button>
+        <button id="selftest">Run self-test on an attached tab</button>
+      </div>
+      <p class="hint">The self-test expects the fixture page from <code>test/fixture/index.html</code>.</p>
+      <ol id="results"></ol>
+    </fieldset>
+
     <script src="options.js"></script>
   </body>
 </html>
