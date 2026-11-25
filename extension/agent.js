@@ -7,7 +7,10 @@
   var AGENT_TOKEN = Date.now() + ':' + Math.random();
   window.__ffbAgentToken = AGENT_TOKEN;
 
-  var C = window.FFBCore;
+  // core.js publishes FFBCore on the content-script global (globalThis); `window`
+  // is the page's Xray wrapper here, so it cannot see that property.
+  var G = typeof globalThis !== 'undefined' ? globalThis : window;
+  var C = G.FFBCore || window.FFBCore;
   var page = window.wrappedJSObject || window;
   var state = { snapshot: 0, refs: new Map(), elements: [] };
 
@@ -17,19 +20,22 @@
     return error;
   }
 
+  // Events must be constructed in the content-script compartment. A page-world
+  // event (new page.Event, new page.KeyboardEvent) dispatched from here never
+  // reaches the page's listeners, which is why React saw nothing.
   function pageEvent(type, init) {
     try {
-      return new page.Event(type, init || {});
-    } catch (e) {
       return new Event(type, init || {});
+    } catch (e) {
+      return new page.Event(type, init || {});
     }
   }
 
   function mouse(type, init) {
-    var opts = Object.assign({ bubbles: true, cancelable: true, view: page, button: 0 }, init || {});
+    var opts = Object.assign({ bubbles: true, cancelable: true, view: window, button: 0 }, init || {});
     try {
-      if (type.indexOf('pointer') === 0 && page.PointerEvent) return new page.PointerEvent(type, opts);
-      return new page.MouseEvent(type, opts);
+      if (type.indexOf('pointer') === 0 && typeof PointerEvent === 'function') return new PointerEvent(type, opts);
+      return new MouseEvent(type, opts);
     } catch (e) {
       return new Event(type, { bubbles: true, cancelable: true });
     }
@@ -324,7 +330,7 @@
       code: params && params.code ? String(params.code) : key,
       bubbles: true,
       cancelable: true,
-      view: page,
+      view: window,
       ctrlKey: !!(params && params.ctrl),
       shiftKey: !!(params && params.shift),
       altKey: !!(params && params.alt),
@@ -333,7 +339,7 @@
     var allowed = true;
     ['keydown', 'keypress', 'keyup'].forEach(function (type) {
       try {
-        var event = new page.KeyboardEvent(type, opts);
+        var event = new KeyboardEvent(type, opts);
         if (!el.dispatchEvent(event)) allowed = false;
       } catch (e) {
         /* ignore */

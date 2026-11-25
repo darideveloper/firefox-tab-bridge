@@ -19,7 +19,10 @@ function renderStatus(status) {
     'port: ' + status.port + ' · ' +
     'site access: ' + (status.permission ? 'granted' : 'not granted (click the toolbar button)') + ' · ' +
     'attached tabs: ' + attached +
-    (status.patchError ? ' · patch: <span class="bad">' + status.patchError + '</span>' : '');
+    (status.patchError ? ' · patch: <span class="bad">' + status.patchError + '</span>' : '') +
+    (status.lastError
+      ? ' · last error (' + status.lastError.where + '): <span class="bad">' + status.lastError.message + '</span>'
+      : '');
 }
 
 async function refresh() {
@@ -50,9 +53,18 @@ document.getElementById('save').addEventListener('click', async () => {
 });
 
 document.getElementById('attach').addEventListener('click', async () => {
-  const tabs = await browser.tabs.query({ active: true, currentWindow: true });
-  const tab = tabs[0];
-  if (!tab) return;
+  // The options page is itself a tab, so "the active tab" is usually this page.
+  // Pick the most recently focused normal tab that a bridge can actually drive.
+  const own = browser.runtime.getURL('');
+  const tabs = await browser.tabs.query({ active: true });
+  const tab = tabs
+    .filter((candidate) => /^(https?|file):/i.test(candidate.url || '') && !(candidate.url || '').startsWith(own))
+    .sort((a, b) => (b.lastAccessed || 0) - (a.lastAccessed || 0))[0];
+  results.innerHTML = '';
+  if (!tab) {
+    results.innerHTML = '<li class="bad">No drivable tab is active. Open the page in another window, or use the toolbar button.</li>';
+    return;
+  }
   const status = await browser.runtime.sendMessage({ type: 'status' });
   const attached = status && status.attached.indexOf(tab.id) !== -1;
   results.innerHTML = '';

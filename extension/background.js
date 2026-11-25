@@ -29,6 +29,18 @@ function ffbError(code, message) {
   return error;
 }
 
+// Last failure, so the options page can show it instead of a bare ERR badge.
+let lastError = null;
+
+function noteError(where, error) {
+  lastError = { where, message: String((error && error.message) || error) };
+  try {
+    browser.storage.local.set({ lastError });
+  } catch (e) {
+    /* ignore */
+  }
+}
+
 // ---- badge ---------------------------------------------------------------
 
 function setBadge(text, color) {
@@ -205,6 +217,22 @@ function supportsTab(url) {
   return typeof url === 'string' && /^(https?|file):/i.test(url);
 }
 
+// Firefox's tabs.executeScript takes one file per call and gives each call its own
+// sandbox, so core.js's FFBCore global would be invisible to agent.js. Concatenate
+// them into one code payload instead: same sandbox, no build step.
+let agentBundlePromise = null;
+
+function agentBundle() {
+  if (!agentBundlePromise) {
+    agentBundlePromise = Promise.all(
+      ['core.js', 'agent.js'].map((file) =>
+        fetch(browser.runtime.getURL(file)).then((response) => response.text())
+      )
+    ).then(([core, agent]) => core + '\n;\n' + agent);
+  }
+  return agentBundlePromise;
+}
+
 async function injectInto(tabId, force) {
   if (!(await ensureRegistered())) {
     throw ffbError('PERMISSION_NEEDED', 'Click the ff-tab-bridge toolbar button once to grant site access, then retry.');
@@ -224,8 +252,7 @@ async function injectInto(tabId, force) {
   }
   if (force || !hasAgent) {
     try {
-      await browser.tabs.executeScript(tabId, { file: 'core.js' });
-      await browser.tabs.executeScript(tabId, { file: 'agent.js' });
+      await browser.tabs.executeScript(tabId, { code: await agentBundle() });
       hasAgent = true;
     } catch (e) {
       throw ffbError('INJECT_FAILED', 'Cannot run in this tab: ' + e.message);
@@ -281,6 +308,7 @@ async function attach(tabId) {
   }
   await injectInto(tabId, true);
   state.attached.add(tabId);
+  lastError = null;
   updateBadge(tabId);
   broadcastState();
   return { tabId, attached: true, title: tab.title || '', url: tab.url || '' };
@@ -295,18 +323,22 @@ async function detach(tabId) {
 
 browser.browserAction.onClicked.addListener(async (tab) => {
   try {
+    // Firefox only accepts permissions.request() synchronously inside the gesture, which an
+    // await breaks, so <all_urls> is a declared permission instead: it is granted at load.
     if (!(await permissionGranted())) {
-      const granted = await browser.permissions.request({ origins: ['<all_urls>'] });
-      if (!granted) {
-        setBadge('OFF', '#a61e1e');
-        return;
-      }
-      await ensureRegistered();
+      noteError(
+        'toolbar click',
+        ffbError('PERMISSION_NEEDED', 'Site access is not granted. Reload the add-on from about:debugging.')
+      );
+      setBadge('OFF', '#a61e1e');
+      return;
     }
+    await ensureRegistered();
     if (state.attached.has(tab.id)) await detach(tab.id);
     else await attach(tab.id);
   } catch (error) {
     console.error('[ffbridge] toolbar click failed', error);
+    noteError('toolbar click', error);
     setBadge('ERR', '#a61e1e');
   }
 });
@@ -472,6 +504,17 @@ async function selfTest(args) {
     if (!/ffbridge/.test(typed.value || '')) throw new Error('value is ' + typed.value);
     return typed.value;
   });
+  await check('input events reach the page', async () => {
+    const after = await agentCall(tabId, 'snapshot', {});
+    if (after.text.indexOf('input name') === -1) throw new Error('page never saw the input event');
+    return 'ok';
+  });
+  await check('keyboard events reach the page', async () => {
+    await agentCall(tabId, 'press_key', { selector: '#delegated-button', key: 'a' });
+    const after = await agentCall(tabId, 'snapshot', {});
+    if (after.text.indexOf('keydown a') === -1) throw new Error('page never saw the keydown');
+    return 'ok';
+  });
   await check('console capture', async () => {
     await agentCall(tabId, 'click', { selector: '#console' });
     const captured = await agentCall(tabId, 'console', { limit: 5 });
@@ -550,13 +593,31 @@ const tools = {
   navigate: (args) => navigate(args),
   screenshot: (args) => screenshot(args),
   selftest: (args) => selfTest(args),
-  status: async () => ({
-    ready: state.ready,
-    port: state.port,
-    attached: Array.from(state.attached),
-    patchError: state.patchError,
-    permission: await permissionGranted(),
-  }),
+  status: async () => {
+    // Probe the attached document with the same sandbox rules the agent sees, so a
+    // missing core export names itself instead of surfacing as a TypeError later.
+    let diag = null;
+    const [firstAttached] = Array.from(state.attached);
+    if (firstAttached) {
+      try {
+        const probe = await browser.tabs.executeScript(firstAttached, {
+          code: '[typeof globalThis.FFBCore, typeof window.FFBCore, typeof window.__ffbAgentToken]',
+        });
+        diag = (probe && probe[0]) || null;
+      } catch (e) {
+        diag = String(e);
+      }
+    }
+    return {
+      ready: state.ready,
+      port: state.port,
+      attached: Array.from(state.attached),
+      patchError: state.patchError,
+      lastError,
+      diag,
+      permission: await permissionGranted(),
+    };
+  },
 };
 
 async function runTool(tool, args) {
@@ -597,9 +658,10 @@ browser.runtime.onMessage.addListener((message, sender) => {
 
 // ---- boot ----------------------------------------------------------------
 
-browser.storage.local.get({ port: DEFAULT_PORT, token: '' }).then((settings) => {
+browser.storage.local.get({ port: DEFAULT_PORT, token: '', lastError: null }).then((settings) => {
   state.port = Number(settings.port) || DEFAULT_PORT;
   state.token = String(settings.token || '');
+  lastError = settings.lastError || null;
   ensureRegistered().catch((e) => console.error('[ffbridge] registration', e));
   connect();
 });

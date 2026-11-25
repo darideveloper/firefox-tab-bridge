@@ -57,6 +57,19 @@
       <output id="filename"></output>
     </div>
 
+    <div class="box">
+      <h2>Popup</h2>
+      <a id="popup" href="index.html?popup=1" target="_blank">Open a popup</a>
+    </div>
+
+    <div class="box">
+      <h2>Delegated events</h2>
+      <p>Counts clicks handled by a listener on document: <output id="delegated">0</output></p>
+      <button id="delegated-button">Click for delegated</button>
+      <h3 id="keydown-result">no keydown yet</h3>
+      <h3 id="input-result">no input yet</h3>
+    </div>
+
     <div class="spacer"></div>
     <h2>Tall page</h2>
     <p>Full-page screenshots stitch the scroll tiles down to here.</p>
@@ -106,6 +119,25 @@
       document.getElementById('file').addEventListener('change', (event) => {
         const file = event.target.files && event.target.files[0];
         document.getElementById('filename').textContent = file ? file.name + ' (' + file.size + ' bytes)' : 'none';
+      });
+
+      // Delegated listener on document: React and most frameworks register here,
+      // not on the target, so this reproduces their event path.
+      document.addEventListener('click', (event) => {
+        const target = event.target;
+        if (!target || target.id !== 'delegated-button') return;
+        const count = Number(target.dataset.count || '0') + 1;
+        target.dataset.count = String(count);
+        target.textContent = 'Click for delegated (' + count + ')';
+      });
+
+      document.addEventListener('keydown', (event) => {
+        document.getElementById('keydown-result').textContent = 'keydown ' + event.key;
+      });
+
+      document.addEventListener('input', (event) => {
+        const target = event.target;
+        document.getElementById('input-result').textContent = 'input ' + (target && target.id);
       });
     </script>
   </body>

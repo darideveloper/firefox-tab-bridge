@@ -48,9 +48,11 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
    or the *Options* button in `about:debugging`). Paste the token, keep the port at `8788`, then
    **Save and reconnect**. Status should read `socket: connected`.
 
-5. Grant site access and attach a tab: click the ff-tab-bridge toolbar icon. The first click asks
-   for `<all_urls>`; accept it. The badge turns **ON** for that tab. Click again to detach. The
-   badge reads **OFF** while the socket is down and **ERR** if the grant or injection failed.
+5. Attach a tab: click the ff-tab-bridge toolbar icon while a normal `http(s)` page is active. Site
+   access is declared in the manifest, so a temporary add-on already has it — there is no prompt.
+   The badge turns **ON** for that tab; click again to detach. The badge reads **OFF** while the
+   socket is down and **ERR** if injection failed, and the options page then prints
+   `last error (toolbar click): …`.
 
 6. Register the MCP server in `~/.config/opencode/opencode.json` (already added by the install):
 
@@ -125,11 +127,12 @@ Refs are valid for one snapshot. Pass the `snapshot` number back with a command 
 | Badge **OFF** | The socket is down: server not running, wrong port, or the token does not match. Start `bun run server`, re-paste the token on the options page. |
 | `NOT_CONNECTED` | opencode started the server but the add-on has not authenticated yet. Load the add-on and save the token. |
 | Tools missing in one opencode window | Fixed: that window relays through the session that owns port 8788. Check the server line in `~/.local/share/opencode/log/opencode.log`: it reads `sharing the bridge at ws://127.0.0.1:8788` when relaying. |
-| `PERMISSION_NEEDED` | Click the toolbar icon once to grant `<all_urls>`; then attach again. |
+| `PERMISSION_NEEDED` | Site access was not granted; reload the add-on from `about:debugging` (it is a declared permission, so a fresh load always has it). |
 | `TAB_NOT_ATTACHED` | Attach the tab (toolbar click, or the `attach` tool after the grant). |
 | `NO_RESPONSE` / `INJECT_FAILED` | The tab is privileged (`about:`, `view-source:`, add-on pages) or was closed mid-command. |
 | `TIMEOUT` | A page left a dialog open or blocked the event loop. `screenshot` and `navigate` allow longer. |
 | `console`/`network` empty | The page-world patch was blocked by the site's CSP, or the document loaded before registration — reload the tab once and retry. |
+| A link does not open its popup | Expected: a synthetic click carries no user activation, so Firefox blocks `target="_blank"`. A popup the site opens for other reasons still shows up in `tabs` and can be attached by id. |
 | Snapshot missing a shadow-DOM control | Closed shadow roots are covered only when the patch loaded before the shadow root was created. |
 
 MV2 in Firefox 152 is deprecated but still loaded. If Firefox ever refuses it, the port is

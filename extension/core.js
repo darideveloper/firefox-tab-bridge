@@ -208,4 +208,7 @@
     describe: describe,
     capLines: capLines,
   };
+  // In a Firefox content script the sandbox global is not `window`; mirror the
+  // export so callers reading either one find it.
+  if (typeof window !== 'undefined' && window !== g) window.FFBCore = g.FFBCore;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
