@@ -75,6 +75,11 @@ attach the tab again. The add-on normally keeps its stored token and the granted
 same extension id; if the status line says `not connected`, re-paste the token. The MCP config and
 the token file survive.
 
+The port belongs to one process. opencode starts one MCP server per session, so the first session
+owns `ws://127.0.0.1:8788` and every other session relays its tool calls through it — no tools fail
+with `EADDRINUSE`, and no session needs to be closed. If the owning session exits, a surviving
+session takes the port over and the add-on reconnects to it automatically.
+
 ## Tools
 
 | Tool | What it does |
@@ -119,6 +124,7 @@ Refs are valid for one snapshot. Pass the `snapshot` number back with a command 
 |---|---|
 | Badge **OFF** | The socket is down: server not running, wrong port, or the token does not match. Start `bun run server`, re-paste the token on the options page. |
 | `NOT_CONNECTED` | opencode started the server but the add-on has not authenticated yet. Load the add-on and save the token. |
+| Tools missing in one opencode window | Fixed: that window relays through the session that owns port 8788. Check the server line in `~/.local/share/opencode/log/opencode.log`: it reads `sharing the bridge at ws://127.0.0.1:8788` when relaying. |
 | `PERMISSION_NEEDED` | Click the toolbar icon once to grant `<all_urls>`; then attach again. |
 | `TAB_NOT_ATTACHED` | Attach the tab (toolbar click, or the `attach` tool after the grant). |
 | `NO_RESPONSE` / `INJECT_FAILED` | The tab is privileged (`about:`, `view-source:`, add-on pages) or was closed mid-command. |

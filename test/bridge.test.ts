@@ -121,7 +121,7 @@ function waitForMessage(socket: WebSocket, predicate: (frame: any) => boolean): 
 describe('bridge socket', () => {
   test('rejects a non-extension origin before the upgrade', async () => {
     const bridge = new Bridge({ port: 0, token: 'a'.repeat(64) });
-    const server = bridge.start();
+    const server = bridge.start()!;
     cleanups.push(() => bridge.stop());
     const response = await fetch(`http://127.0.0.1:${server.port}/`, { headers: { Origin: 'https://evil.example' } });
     expect(response.status).toBe(403);
@@ -130,7 +130,7 @@ describe('bridge socket', () => {
   test('rejects a bad token and accepts the right one', async () => {
     const token = 'b'.repeat(64);
     const bridge = new Bridge({ port: 0, token });
-    const server = bridge.start();
+    const server = bridge.start()!;
     cleanups.push(() => bridge.stop());
     const url = `ws://127.0.0.1:${server.port}`;
 
@@ -151,7 +151,7 @@ describe('bridge socket', () => {
 
   test('round-trips a tool call and rejects a timeout', async () => {
     const bridge = new Bridge({ port: 0, token: 'c'.repeat(64) });
-    const server = bridge.start();
+    const server = bridge.start()!;
     cleanups.push(() => bridge.stop());
     const socket = await openSocket(`ws://127.0.0.1:${server.port}`, 'moz-extension://test');
     socket.send(JSON.stringify({ event: 'hello', token: 'c'.repeat(64) }));
@@ -169,5 +169,40 @@ describe('bridge socket', () => {
 
     await expect(bridge.call('silent', {}, 100)).rejects.toMatchObject({ code: 'TIMEOUT' });
     socket.close();
+  });
+});
+
+describe('shared bridge', () => {
+  async function until(check: () => boolean, ms = 3000) {
+    const deadline = Date.now() + ms;
+    while (!check() && Date.now() < deadline) await Bun.sleep(25);
+    return check();
+  }
+
+  test('a second instance relays through the host, then takes the port over', async () => {
+    const token = 'd'.repeat(64);
+    const host = new Bridge({ port: 0, token });
+    const server = host.start()!;
+    const port = server.port;
+    const socket = await openSocket(`ws://127.0.0.1:${port}`, 'moz-extension://test');
+    socket.send(JSON.stringify({ event: 'hello', token }));
+    await waitForMessage(socket, (frame) => frame.event === 'ready');
+    socket.onmessage = (event) => {
+      const frame = JSON.parse(String(event.data));
+      if (typeof frame.id !== 'number') return;
+      socket.send(JSON.stringify({ id: frame.id, ok: true, result: { tool: frame.tool } }));
+    };
+
+    const second = new Bridge({ port, token });
+    cleanups.push(() => second.stop());
+    second.start();
+    expect(second.mode).toBe('client');
+    expect(await until(() => second.ready)).toBe(true);
+    expect(await second.call('tabs', {})).toEqual({ tool: 'tabs' });
+
+    // The opencode session holding the host exits: the survivor must take the port.
+    host.stop();
+    expect(await until(() => second.mode === 'host')).toBe(true);
+    expect(second.ready).toBe(false);
   });
 });

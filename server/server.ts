@@ -303,16 +303,16 @@ tool(
       b64: file.b64,
     });
     return { ...(result as object), uploaded: file.path, bytes: file.size };
-  },
-  120000
+  }
 );
 
 // ---- boot ----------------------------------------------------------------
 
 const transport = new StdioServerTransport();
 await server.connect(transport);
+const where = bridge.mode === 'host' ? `ws://127.0.0.1:${port}` : `sharing the bridge at ws://127.0.0.1:${port}`;
 process.stderr.write(
-  `ffbridge: MCP ready · ws://127.0.0.1:${port} · token file ${TOKEN_PATH} · origin locked to moz-extension://\n`
+  `ffbridge: MCP ready · ${where} · token file ${TOKEN_PATH} · origin locked to moz-extension://\n`
 );
 
 function shutdown() {

@@ -73,14 +73,31 @@ type Pending = {
 type Socket = {
   send(data: string): void;
   close(code?: number, reason?: string): void;
-  data: { origin: string };
+  data: { origin: string; kind?: 'agent' | 'client' };
 };
+
+// Any local process can claim a moz-extension origin, just as it can claim any other
+// header; the 0600 token is what actually authenticates. The origin gate only keeps
+// ordinary web pages out, so a sibling MCP process uses this one.
+const CLIENT_ORIGIN = 'moz-extension://ffbridge-client';
+
+function isPortBusy(error: any): boolean {
+  return error?.code === 'EADDRINUSE';
+}
 
 export class Bridge {
   readonly port: number;
   readonly token: string;
+  /** 'host' owns the WebSocket the add-on connects to; 'client' relays through another session's host. */
+  mode: 'host' | 'client' = 'host';
   private server: ReturnType<typeof Bun.serve> | null = null;
   private socket: Socket | null = null;
+  private clients = new Set<Socket>();
+  private relays = new Map<number, { socket: Socket; id: number }>();
+  private upstream: WebSocket | null = null;
+  private pingTimer: ReturnType<typeof setInterval> | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+  private stopped = false;
   private pending = new Map<number, Pending>();
   private nextId = 1;
   ready = false;
@@ -92,7 +109,21 @@ export class Bridge {
   }
 
   start() {
-    this.server = Bun.serve({
+    this.stopped = false;
+    try {
+      this.server = this.listen();
+      this.mode = 'host';
+    } catch (error: any) {
+      if (!isPortBusy(error)) throw error;
+      // Another opencode session already owns the port: share it instead of dying.
+      this.mode = 'client';
+      this.connect();
+    }
+    return this.server;
+  }
+
+  private listen(): ReturnType<typeof Bun.serve> {
+    return Bun.serve({
       hostname: '127.0.0.1',
       port: this.port,
       fetch: (request, server) => {
@@ -113,7 +144,6 @@ export class Bridge {
         close: (socket) => this.onClose(socket as unknown as Socket),
       },
     });
-    return this.server;
   }
 
   private onMessage(socket: Socket, raw: string) {
@@ -130,6 +160,13 @@ export class Bridge {
         socket.close(1008, 'bad token');
         return;
       }
+      if (frame.role === 'client') {
+        socket.data.kind = 'client';
+        this.clients.add(socket);
+        socket.send(JSON.stringify({ event: 'ready' }));
+        return;
+      }
+      socket.data.kind = 'agent';
       if (this.socket && this.socket !== socket) {
         try {
           this.socket.close(1000, 'replaced by a newer connection');
@@ -147,6 +184,11 @@ export class Bridge {
       socket.send(JSON.stringify({ event: 'pong' }));
       return;
     }
+    if (socket.data.kind === 'client') {
+      this.onClientCall(socket, frame);
+      return;
+    }
+
     if (frame.event === 'state') {
       this.attached = Array.isArray(frame.attached) ? frame.attached : [];
       return;
@@ -158,6 +200,14 @@ export class Bridge {
     if (frame.event) return;
 
     if (typeof frame.id !== 'number') return;
+
+    const relay = this.relays.get(frame.id);
+    if (relay) {
+      this.relays.delete(frame.id);
+      this.send(relay.socket, { id: relay.id, ok: frame.ok, result: frame.result, error: frame.error });
+      return;
+    }
+
     const pending = this.pending.get(frame.id);
     if (!pending) return;
     this.pending.delete(frame.id);
@@ -165,25 +215,138 @@ export class Bridge {
     if (frame.ok) {
       pending.resolve(frame.result);
     } else {
-      const error = frame.error || {};
-      pending.reject(bridgeError(error.code || 'EXTENSION_ERROR', error.message || 'The add-on reported an error.'));
+      pending.reject(bridgeError(...errorOf(frame)));
+    }
+  }
+
+  // A sibling opencode session's MCP process relays its tool calls through us.
+  private onClientCall(socket: Socket, frame: any) {
+    if (typeof frame.id !== 'number') return;
+    if (!this.socket || !this.ready) {
+      this.send(socket, {
+        id: frame.id,
+        ok: false,
+        error: { code: 'NOT_CONNECTED', message: 'Another session owns the bridge but the add-on is not connected to it.' },
+      });
+      return;
+    }
+    const id = this.nextId++;
+    this.relays.set(id, { socket, id: frame.id });
+    this.send(this.socket, { id, tool: frame.tool, args: frame.args ?? {} });
+  }
+
+  private send(socket: { send(data: string): void }, frame: unknown) {
+    try {
+      socket.send(JSON.stringify(frame));
+    } catch {
+      /* the peer is gone; its close handler cleans up */
     }
   }
 
   private onClose(socket: Socket) {
+    if (socket.data.kind === 'client') {
+      this.clients.delete(socket);
+      for (const [id, relay] of this.relays) {
+        if (relay.socket === socket) this.relays.delete(id);
+      }
+      return;
+    }
     if (this.socket !== socket) return;
     this.socket = null;
     this.ready = false;
     this.attached = [];
+    for (const [id, relay] of this.relays) {
+      this.send(relay.socket, {
+        id: relay.id,
+        ok: false,
+        error: { code: 'DISCONNECTED', message: 'The Firefox add-on disconnected before answering.' },
+      });
+      this.relays.delete(id);
+    }
+    this.failPending('DISCONNECTED', 'The Firefox add-on disconnected before answering.');
+  }
+
+  // ---- client mode: relay through another session's host -----------------
+
+  private connect() {
+    if (this.stopped) return;
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(`ws://127.0.0.1:${this.port}`, { headers: { Origin: CLIENT_ORIGIN } } as any);
+    } catch {
+      this.scheduleRetry();
+      return;
+    }
+    this.upstream = ws;
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ event: 'hello', token: this.token, role: 'client' }));
+    };
+    ws.onmessage = (event) => this.onUpstreamMessage(String(event.data));
+    ws.onclose = () => {
+      if (this.upstream !== ws) return;
+      this.upstream = null;
+      this.ready = false;
+      this.failPending('DISCONNECTED', 'The ff-tab-bridge host went away; reconnecting.');
+      this.scheduleRetry();
+    };
+  }
+
+  private onUpstreamMessage(raw: string) {
+    let frame: any;
+    try {
+      frame = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    if (!frame || typeof frame !== 'object') return;
+    if (frame.event === 'ready') {
+      this.ready = true;
+      if (!this.pingTimer) {
+        this.pingTimer = setInterval(() => this.send(this.upstream!, { event: 'ping' }), 45000);
+      }
+      return;
+    }
+    if (typeof frame.id !== 'number') return;
+    const pending = this.pending.get(frame.id);
+    if (!pending) return;
+    this.pending.delete(frame.id);
+    clearTimeout(pending.timer);
+    if (frame.ok) {
+      pending.resolve(frame.result);
+    } else {
+      pending.reject(bridgeError(...errorOf(frame)));
+    }
+  }
+
+  // The host is another opencode session; when it exits the port frees up and we take over.
+  private scheduleRetry() {
+    if (this.stopped || this.retryTimer) return;
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      if (this.stopped) return;
+      try {
+        this.server = this.listen();
+        this.mode = 'host';
+        this.upstream = null;
+        return;
+      } catch (error: any) {
+        if (!isPortBusy(error)) throw error;
+      }
+      this.connect();
+    }, 1000);
+  }
+
+  private failPending(code: string, message: string) {
     for (const [id, pending] of this.pending) {
       clearTimeout(pending.timer);
-      pending.reject(bridgeError('DISCONNECTED', 'The Firefox add-on disconnected before answering.'));
+      pending.reject(bridgeError(code, message));
       this.pending.delete(id);
     }
   }
 
   call(tool: string, args: Record<string, unknown> = {}, timeoutMs = 45000): Promise<any> {
-    if (!this.socket || !this.ready) {
+    const target = this.ready ? (this.mode === 'host' ? this.socket : this.upstream) : null;
+    if (!target) {
       return Promise.reject(
         bridgeError(
           'NOT_CONNECTED',
@@ -199,7 +362,7 @@ export class Bridge {
       }, timeoutMs);
       this.pending.set(id, { resolve: resolveCall, reject: rejectCall, timer });
       try {
-        this.socket!.send(JSON.stringify({ id, tool, args }));
+        target.send(JSON.stringify({ id, tool, args }));
       } catch (error) {
         this.pending.delete(id);
         clearTimeout(timer);
@@ -209,19 +372,40 @@ export class Bridge {
   }
 
   stop() {
-    for (const [id, pending] of this.pending) {
-      clearTimeout(pending.timer);
-      pending.reject(bridgeError('STOPPED', 'The bridge is shutting down.'));
-      this.pending.delete(id);
+    this.stopped = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    if (this.pingTimer) clearInterval(this.pingTimer);
+    this.retryTimer = null;
+    this.pingTimer = null;
+    this.failPending('STOPPED', 'The bridge is shutting down.');
+    this.relays.clear();
+    for (const client of this.clients) {
+      try {
+        client.close(1001, 'server shutting down');
+      } catch {
+        /* ignore */
+      }
     }
+    this.clients.clear();
     try {
       this.socket?.close(1001, 'server shutting down');
+    } catch {
+      /* ignore */
+    }
+    try {
+      this.upstream?.close(1001, 'server shutting down');
     } catch {
       /* ignore */
     }
     this.server?.stop(true);
     this.server = null;
     this.socket = null;
+    this.upstream = null;
     this.ready = false;
   }
+}
+
+function errorOf(frame: any): [string, string] {
+  const error = frame.error || {};
+  return [error.code || 'EXTENSION_ERROR', error.message || 'The add-on reported an error.'];
 }
