@@ -20,7 +20,8 @@ Repo: `/mnt/work/develop/automation/ff-tab-bridge` → `github.com/darideveloper
 | `test/` | `bun test` (21 tests, green); fixture page with popup/delegated/keydown/input cases; in-browser self-test 13/13 |
 | `AGENTS.md` | ai-daridev block + the four non-negotiable constraints |
 | `package.json` | scripts `server`, `fixture`, `test`; version `0.1.0` |
-| `docs/ai-daridev/` | only `.gitkeep`; the flow writes `spec.md`/`decisions.md`/`log.md` on first write |
+| `docs/records/` | `spec.md` (scope, behaviour, limits, verification) and `log.md` (one entry per card); screenshots in `evidence/` (ignored) |
+| `docs/decisions/` | ADRs 0001 port sharing, 0002 content-compartment events, 0003 required site access |
 | `~/.config/opencode/opencode.json` | `mcp.servers.ffbridge` enabled at `/mnt/work/...` |
 | Odoo | project and stages exist, **zero cards created** (backlog not run) |
 
