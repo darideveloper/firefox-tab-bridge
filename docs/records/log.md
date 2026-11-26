@@ -21,3 +21,6 @@ Shipped: scroll answers document offsets (300 after a 300px move) instead of the
 
 ## runtime-verification — 2026-11-25
 Shipped: every planned case passes in a real Firefox or is documented as a limit; the restart drill closes the add-on lifecycle question.
+
+## custom-extension-icon — 2026-11-25
+Shipped: hand-authored `bridge.svg` (16px grid, one `#0060df`, 1px padding) with 16/32/48/96 exports wired as `icons` and `browser_action.default_icon`, no new permission.
