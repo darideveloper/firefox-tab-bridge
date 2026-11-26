@@ -1,27 +1,27 @@
 # Plan: ff-tab-bridge
 
-_standalone · scaffold committed as `bfc9c80` on `main` · nothing runs yet_
+_standalone · `main` · loaded in Firefox 152 and verified against real sites (2026-11-25)_
 
 **Goal.** Give opencode control of Firefox tabs you explicitly attach, via a custom
 WebExtension and a local MCP server. No cookie, history, bookmark or profile access.
 
-Repo: `/mnt/hd/develop/automation/ff-tab-bridge` → `github.com/darideveloper/firefox-tab-bridge`
+Repo: `/mnt/work/develop/automation/ff-tab-bridge` → `github.com/darideveloper/firefox-tab-bridge`
 (Odoo project `firefox-tab-bridge`, done column `Sprint Complete`, default tag `script`).
 
 ## Where it stands
 
 | Thing | State |
 |---|---|
-| Repo | initialized, `origin` = SSH, tree has the scaffold commit plus the uncommitted implementation |
-| `extension/manifest.json` | real MV2, `web_accessible_resources`, `data_collection_permissions`, **not yet loaded in a browser** |
-| `extension/background.js`, `extension/options/*` | implemented: socket, lease, router, screenshots, options page |
-| `extension/agent.js`, `extension/core.js`, `extension/patches.js` | implemented: snapshot, primitives, wait_for, upload, page-world capture |
-| `server/` | implemented: MCP stdio + `Bun.serve` WebSocket, token auth, 16 tools |
-| `test/` | `bun test` (20 tests, green), fixture page + fixture server, options-page self-test |
+| Repo | `main` level with `origin/main` at `c89a61f`; scaffold + implementation committed |
+| `extension/manifest.json` | real MV2, loads in Firefox 152; `<all_urls>` is a declared permission (no prompt) |
+| `extension/background.js`, `extension/options/*` | implemented and exercised: socket, lease, router, screenshots, options page status + self-test |
+| `extension/agent.js`, `extension/core.js`, `extension/patches.js` | implemented and verified on real sites: snapshot, primitives, wait_for, upload, page-world capture |
+| `server/` | implemented: MCP stdio + `Bun.serve` WebSocket, token auth, 16 tools, one host shared by every session |
+| `test/` | `bun test` (21 tests, green); fixture page with popup/delegated/keydown/input cases; in-browser self-test 13/13 |
 | `AGENTS.md` | ai-daridev block + the four non-negotiable constraints |
 | `package.json` | scripts `server`, `fixture`, `test`; version `0.1.0` |
 | `docs/ai-daridev/` | only `.gitkeep`; the flow writes `spec.md`/`decisions.md`/`log.md` on first write |
-| `~/.config/opencode/opencode.json` | `mcp.servers.ffbridge` enabled, path corrected to `/mnt/hd/...` (backup `opencode.json.bak.20261110135028`) |
+| `~/.config/opencode/opencode.json` | `mcp.servers.ffbridge` enabled at `/mnt/work/...` |
 | Odoo | project and stages exist, **zero cards created** (backlog not run) |
 
 ## Decisions (locked)
@@ -39,13 +39,14 @@ Repo: `/mnt/hd/develop/automation/ff-tab-bridge` → `github.com/darideveloper/f
 
 ## What I need from you
 
-1. **Load the add-on** — `about:debugging#/runtime/this-firefox` → *Load Temporary Add-on* →
-   `extension/manifest.json`, then tell me exactly what Firefox 152 says. This decides MV2 vs a
-   forced MV3 migration and it is the only step I cannot perform.
-2. **Restart opencode once** — the config change only applies on restart. Expected result: no
-   `ffbridge` tools appear, because the entry is disabled until `server/server.ts` exists.
-3. **When you want the build sliced** — run `/ai-daridev-backlog` with the tool list below. I will not
-   create or move cards on my own.
+Remaining, in one line each:
+
+1. **Open one throwaway tab** (e.g. `http://127.0.0.1:8787/` with `bun run fixture`) so I can re-run the
+   verification — the tab used during the 2026-11-25 pass was closed.
+2. **Close that tab while it is attached**, and **revoke site access** from `about:addons`, one at a
+   time; I watch `tabs`/`status` and record the behaviour.
+3. **Approve the Odoo cards** if you want the work tracked there — write tools are yours to approve,
+   and `/ai-daridev-backlog` is the normal path.
 
 ## Tools to build (16)
 
@@ -54,8 +55,8 @@ screenshot, console, network, upload`
 
 - `tabs` lists every open tab with an `attached` flag — that is also how the agent finds a popup the
   page opened. No `onCreated` handler, no auto-follow.
-- `attach(tabId)`; the first `<all_urls>` grant needs your toolbar click, after that the agent can
-  attach any tab itself.
+- `attach(tabId)`; `<all_urls>` is a declared permission, so a temporary add-on already has it and no
+  prompt appears. Any session may attach any supported tab itself.
 - `screenshot` writes a PNG to `/tmp/opencode` and returns the path.
 - `upload(tabId, ref, path)` — server reads the bytes, page builds `File` + `DataTransfer`.
 
@@ -93,15 +94,31 @@ In Code Mode the tools show up as `tools.ffbridge.<tool>`.
 - [x] p15 **Dropped.** `web-ext lint` is not a gate here — [agent]
   - `addons-linter` hangs on a bare `require()` in this environment, with no manifest involved; npm and
     AMO both answer 200. The manifest gate is `about:debugging` loading it, which is p16.
-- [ ] p16 Load the temporary add-on and paste the token — [you, blocking]
-- [x] p17 Flip `mcp.servers.ffbridge` to enabled, restart, confirm `tools.ffbridge.*` appear — [agent]
-  - Enabled with the corrected `/mnt/hd/...` path. Restart not performed in this session; `tools/list` over stdio returns all 16 tools.
-- [ ] p18 Attach a tab and run the smoke prompt — [you]
-- [ ] p19 Real-site matrix: GitHub search, React form, shadow-DOM site, full-page screenshot, upload,
+- [x] p16 Loaded the temporary add-on on Firefox 152 and authenticated it — [you]
+  - MV2 loads fine; the plan's biggest risk is closed. The token must be pasted once; the add-on keeps
+    it across reloads, and a Firefox restart drops the add-on itself.
+- [x] p17 `mcp.servers.ffbridge` enabled; `tools.ffbridge.*` appear in Code Mode — [agent]
+  - Enabled at `/mnt/work/...`. Fixed in the same pass: every session used to spawn its own server and
+    all but the first died on `EADDRINUSE`; the port owner is now the host and the rest relay
+    (`d066eb3`).
+- [x] p18 Attached a tab and ran the in-browser self-test — [you + agent]
+  - First run: 2 passed, 9 failed. Three real bugs followed (`c89a61f`): the two content files were
+    injected into separate sandboxes; the helpers were read from `window` instead of the content
+    global; synthetic events were built with page-world constructors, so page listeners (React, any
+    delegated handler) never fired. Final state: 13/13 self-test checks green.
+- [x] p19 Real-site matrix: GitHub search, React form, shadow-DOM site, full-page screenshot, upload,
   popup follow, network capture, detach mid-command, tab close, permission revoke — [agent]
+  - Passed: GitHub search (183-element snapshot, click by ref, `wait_for` 253 ms), React controlled
+    input on TodoMVC (typing + Enter adds the todo), full-page screenshot (3 tiles, 2375×3455), network
+    capture on a real site, hover, back/forward/reload with agent re-injection, upload and closed
+    shadow root on the fixture, detach mid-command, `TAB_NOT_ATTACHED`, `STALE_SNAPSHOT`.
+  - Limited by design: a `target="_blank"` popup is blocked because a synthetic click carries no user
+    activation; a popup the site opens anyway is found by `tabs` and attachable by id.
+  - Not yet exercised: closing a tab while attached, and revoking site access at runtime.
 - [x] p20 README tool reference + tag `v0.1.0` — [agent]
-  - README rewritten. Tag not created: nothing is committed yet (no commit was requested).
   - Install, token, tool reference, security model, troubleshooting, "reload after a Firefox restart".
+  - The README step 5 and the `PERMISSION_NEEDED` row were rewritten once `<all_urls>` became a
+    declared permission: there is no grant prompt any more.
 - ~~p20/p21 AMO credentials and signing~~ — **removed** with decision 6.
 
 ## Environment facts (verified, do not re-litigate)
@@ -115,13 +132,12 @@ In Code Mode the tools show up as `tools.ffbridge.<tool>`.
 
 ## Risks
 
-- **MV2 in Firefox 152 is unverified.** You are 38 versions past the manifest floor. If it refuses,
-  every later step becomes MV3: `scripting.registerContentScripts`, event page, `host_permissions`.
-  p16 answers this before any real code is written.
+- **MV2 in Firefox 152** — resolved: the add-on loads and runs. MV3 is only needed if Firefox ever
+  refuses MV2 (`scripting.registerContentScripts`, event page, `host_permissions`).
 - **Snapshot/ref work overruns.** Timebox p8, default `interactiveOnly`, cap lines.
-- **React-controlled inputs** resist synthetic typing; MAIN-world `execCommand` is the fallback, and
-  some sites will still refuse.
+- **React-controlled inputs** — resolved: the event-construction fix makes React's delegated handlers
+  run (TodoMVC typing + Enter verified). A site that gates on `isTrusted` still refuses by design.
 - **`isTrusted` is false on everything we dispatch.** No workaround exists in WebExtensions. A site that
-  gates on it gets reported, never evaded.
+  gates on it gets reported, never evaded. A `target="_blank"` popup is blocked for the same reason.
 - **Full-page screenshots** are scroll-stitched canvas output: fixed headers repeat, lazy content may
   not load. Documented ceiling, not a bug to chase.
