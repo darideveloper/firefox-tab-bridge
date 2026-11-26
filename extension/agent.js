@@ -124,13 +124,28 @@
   var overlay = null; // { host, root, pill }
   var overlayState = { busy: null, pulse: 0 };
 
+  // Operate-mode chrome: the page owns the attention and the marker only reports
+  // state. Idle is a hollow dot on the accent; busy fills it, pulses and drops
+  // the surface a notch while the label names the command. One authored
+  // entrance, and none of it when the page asks for less motion or more contrast.
   var OVERLAY_CSS = [
-    '.frame{position:absolute;inset:0;border:3px solid #0060df;box-sizing:border-box}',
-    '.pill{position:absolute;right:16px;bottom:16px;max-width:60vw;padding:5px 12px;border-radius:999px;',
-    'background:#0060df;color:#fff;font:600 13px/1.4 system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);',
-    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
-    '.pill.busy{animation:ffb-pulse .7s ease-in-out infinite}',
-    '@keyframes ffb-pulse{50%{opacity:.55;transform:scale(1.06)}}',
+    '.frame{position:absolute;inset:0;border:2px solid #0060df;box-sizing:border-box;border-radius:0}',
+    '.pill{position:absolute;right:16px;bottom:16px;display:flex;align-items:center;gap:8px;',
+    'max-width:min(70vw,380px);height:30px;padding:0 13px 0 11px;border-radius:999px;',
+    'background:#0060df;color:#fff;font:600 12.5px/1 system-ui,-apple-system,"Segoe UI",sans-serif;',
+    'letter-spacing:.02em;white-space:nowrap;',
+    'box-shadow:inset 0 0 0 1px rgba(255,255,255,.16),0 6px 20px rgba(0,0,0,.28),0 1px 2px rgba(0,0,0,.18);',
+    'animation:ffb-in .16s cubic-bezier(.16,1,.3,1);transition:background .18s ease-out}',
+    '.dot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;box-sizing:border-box;',
+    'border:2px solid rgba(255,255,255,.85)}',
+    '.label{overflow:hidden;text-overflow:ellipsis}',
+    '.pill.busy{background:#0053c4}',
+    '.pill.busy .dot{background:#fff;border-color:#fff;animation:ffb-pulse .8s cubic-bezier(.4,0,.2,1) infinite}',
+    '@keyframes ffb-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(.72);opacity:.55}}',
+    '@keyframes ffb-in{from{opacity:0;transform:translateY(6px) scale(.96)}to{opacity:1;transform:none}}',
+    '@media (prefers-reduced-motion:reduce){.pill{animation:none}.pill.busy .dot{animation:none}}',
+    '@media (prefers-contrast:more){.pill{background:#00408f;',
+    'box-shadow:0 0 0 2px #fff,0 6px 20px rgba(0,0,0,.4)}.frame{border-width:3px}}',
   ].join('');
 
   var HOST_STYLE = {
@@ -169,12 +184,18 @@
       frame.className = 'frame';
       var pill = document.createElement('div');
       pill.className = 'pill';
-      pill.textContent = PILL_IDLE;
+      var dot = document.createElement('span');
+      dot.className = 'dot';
+      var label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = PILL_IDLE;
+      pill.appendChild(dot);
+      pill.appendChild(label);
       root.appendChild(style);
       root.appendChild(frame);
       root.appendChild(pill);
       (document.documentElement || document.body).appendChild(host);
-      overlay = { host: host, root: root, pill: pill };
+      overlay = { host: host, root: root, pill: pill, label: label };
       return overlay;
     } catch (e) {
       overlay = null;
@@ -184,7 +205,7 @@
 
   function renderOverlay() {
     if (!overlay) return;
-    overlay.pill.textContent = overlayState.busy || PILL_IDLE;
+    overlay.label.textContent = overlayState.busy || PILL_IDLE;
     overlay.pill.className = overlayState.busy ? 'pill busy' : 'pill';
   }
 
