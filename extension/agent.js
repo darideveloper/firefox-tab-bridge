@@ -405,12 +405,12 @@
       } catch (e) {
         el.scrollIntoView();
       }
-      return effect(el, { scrollX: window.scrollX, scrollY: window.scrollY });
+      return effect(el, scrollOffsets());
     }
     var left = Number(params.dx || 0);
     var top = Number(params.dy || 0);
     window.scrollBy({ left: left, top: top, behavior: 'instant' });
-    return { url: location.href, scrollX: window.scrollX, scrollY: window.scrollY, dialogs: newDialogs() };
+    return { url: location.href, scrollX: scrollOffsets().scrollX, scrollY: scrollOffsets().scrollY, dialogs: newDialogs() };
   }
 
   function upload(params) {
@@ -501,14 +501,25 @@
 
   // ---- internal ------------------------------------------------------------
 
+  // window.scrollY reads 0 from the content sandbox (it reports the sandbox's
+  // viewport), so read the document's own scroll offsets instead.
+  function scrollOffsets() {
+    var doc = document.documentElement || document.body;
+    return {
+      scrollX: Math.round((doc && doc.scrollLeft) || window.scrollX || 0),
+      scrollY: Math.round((doc && doc.scrollTop) || window.scrollY || 0),
+    };
+  }
+
   function metrics() {
+    var offsets = scrollOffsets();
     return {
       url: location.href,
       title: document.title,
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
-      scrollX: window.scrollX,
-      scrollY: window.scrollY,
+      scrollX: offsets.scrollX,
+      scrollY: offsets.scrollY,
       scrollHeight: Math.max(document.documentElement.scrollHeight, document.body ? document.body.scrollHeight : 0),
       scrollWidth: Math.max(document.documentElement.scrollWidth, document.body ? document.body.scrollWidth : 0),
       dpr: window.devicePixelRatio || 1,
