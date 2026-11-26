@@ -24,3 +24,6 @@ Shipped: every planned case passes in a real Firefox or is documented as a limit
 
 ## custom-extension-icon — 2026-11-25
 Shipped: hand-authored `bridge.svg` (16px grid, one `#0060df`, 1px padding) with 16/32/48/96 exports wired as `icons` and `browser_action.default_icon`, no new permission.
+
+## in-page-attach-indicator — 2026-11-25
+Shipped: every attached tab carries a closed-shadow marker — a 2px `#0060df` frame and a bottom-right capsule that names the running command and pulses — hidden around both capture paths so `snapshot` and screenshots stay clean.
