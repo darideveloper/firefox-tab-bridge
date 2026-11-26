@@ -10,7 +10,7 @@ screenshot (viewport and stitched full page), console capture, network metadata,
 attach/detach lease — 16 tools over `tools.ffbridge.*`.
 
 Out, by decision: iframes, privileged pages (`about:`, `view-source:`, add-on pages), cookies,
-history, bookmarks, form autofill, profile files, AMO signing, trusted-input evasion.
+history, bookmarks, form autofill, profile files, trusted-input evasion.
 
 ## Architecture
 
@@ -59,12 +59,15 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
 ## Install and operations
 
 1. `bun install`; `bun run server` once to create the token.
-2. `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → `extension/manifest.json`.
+2. Install the AMO-signed XPI — `dist/ff-tab-bridge-1.0.0.xpi`, unlisted self-distribution — and
+   confirm ff-tab-bridge is enabled; it survives a full Firefox restart with its token. Loading
+   `extension/manifest.json` as a temporary add-on from `about:debugging` stays the MV2 iteration
+   path and is dropped when Firefox closes.
 3. Options page: port `8788`, paste the token, Save and reconnect → `socket: connected`.
 4. Click the toolbar icon **on an http(s) tab** to attach (badge ON). The icon refuses `about:` and
    add-on pages, and says so on the options page as `last error (toolbar click)`.
-5. After every Firefox start, repeat step 2, click the icon again, and check the badge. The token,
-   the permission and the option values survive; the add-on and the lease do not.
+5. After every Firefox start, click the icon again: the signed install keeps the add-on, the token
+   and the permission, but the lease does not survive.
 
 Port sharing: the first opencode session to start owns 8788, the rest relay; if the owner exits, a
 survivor takes the port and the add-on reconnects within about five seconds.

@@ -9,8 +9,9 @@
 ## Constraints that are not up for debate
 
 - The extension never reads cookies, history, bookmarks or profile files.
-- Manifest V2, loaded as a temporary add-on in `about:debugging`. No AMO account,
-  no signing, no MV3 migration unless Firefox stops loading it.
+- Manifest V2, installed from an AMO-signed XPI (unlisted, self-distribution) so it survives a
+  Firefox restart; temporary loading in `about:debugging` is the iteration fallback. No MV3
+  migration unless Firefox stops loading it.
 - The MCP server binds `127.0.0.1` and rejects any WebSocket whose `Origin` is not
   this extension.
 - No trusted-input evasion. If a site refuses synthetic events, report it.

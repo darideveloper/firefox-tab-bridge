@@ -15,7 +15,8 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
 
 ## Requirements
 
-- Firefox 128 or newer (verified on 152.0.4), loaded as a **temporary add-on**.
+- Firefox 128 or newer (verified on 152.0.4), installed from a **signed XPI** — Firefox 152 refuses
+  unsigned builds.
 - [Bun](https://bun.sh) 1.2 or newer.
 - opencode with the `ffbridge` MCP server registered (see below).
 
@@ -24,7 +25,7 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
 1. Dependencies:
 
    ```bash
-   cd /mnt/hd/develop/automation/ff-tab-bridge
+   cd /mnt/work/develop/automation/ff-tab-bridge
    bun install
    ```
 
@@ -41,20 +42,34 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
    The token file is written with mode `0600`. opencode starts the same command itself, so after
    this first run you normally let the MCP client own it.
 
-3. Load the add-on: open `about:debugging#/runtime/this-firefox` → **Load Temporary Add-on…** →
-   select `extension/manifest.json`.
+3. Pack the add-on. `manifest.json` must sit at the archive root, so zip from inside `extension/`:
 
-4. Copy the token and open the add-on's options page (about:addons → ff-tab-bridge → Preferences,
+   ```bash
+   mkdir -p dist && cd extension && zip -r -X ../dist/ff-tab-bridge-1.0.0.xpi . -x '.*' && cd ..
+   ```
+
+   `dist/` is ignored by git; the archive is a build output, never committed.
+
+4. Sign it at the [AMO Developer Hub](https://addons.mozilla.org/developers/) → **Submit a New
+   Add-on** → **On your own** (unlisted, self-distribution) → upload
+   `dist/ff-tab-bridge-1.0.0.xpi` → download the signed copy. The signature covers the version, so
+   every manifest change needs a new upload.
+
+5. Install the signed XPI: open the downloaded file in Firefox and confirm the prompt, or use
+   `about:addons` → gear → **Install Add-on From File…**. ff-tab-bridge must show as enabled and
+   *not* as a temporary add-on.
+
+6. Copy the token and open the add-on's options page (about:addons → ff-tab-bridge → Preferences,
    or the *Options* button in `about:debugging`). Paste the token, keep the port at `8788`, then
    **Save and reconnect**. Status should read `socket: connected`.
 
-5. Attach a tab: click the ff-tab-bridge toolbar icon while a normal `http(s)` page is active. Site
-   access is declared in the manifest, so a temporary add-on already has it — there is no prompt.
+7. Attach a tab: click the ff-tab-bridge toolbar icon while a normal `http(s)` page is active. Site
+   access is declared in the manifest, so the add-on already holds it — there is no prompt.
    The badge turns **ON** for that tab; click again to detach. The badge reads **OFF** while the
    socket is down and **ERR** if injection failed, and the options page then prints
    `last error (toolbar click): …`.
 
-6. Register the MCP server in `~/.config/opencode/opencode.json` (already added by the install):
+8. Register the MCP server in `~/.config/opencode/opencode.json` (already added by the install):
 
    ```json
    {
@@ -62,7 +77,7 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
        "servers": {
          "ffbridge": {
            "type": "local",
-           "command": ["bun", "run", "/mnt/hd/develop/automation/ff-tab-bridge/server/server.ts"],
+           "command": ["bun", "run", "/mnt/work/develop/automation/ff-tab-bridge/server/server.ts"],
            "disabled": false
          }
        }
@@ -72,10 +87,14 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
 
    Restart opencode. The tools appear as `tools.ffbridge.<name>` in Code Mode.
 
-Temporary add-ons are removed when Firefox closes. After a Firefox restart, repeat step 3 and
-attach the tab again. The add-on normally keeps its stored token and the granted permission for the
-same extension id; if the status line says `not connected`, re-paste the token. The MCP config and
-the token file survive.
+A signed install survives Firefox restarts: the add-on stays enabled, with its stored token and the
+declared site access, so there is no reload step after a reboot. Just attach the tab again after a
+restart of Firefox — the lease is per session, not per install.
+
+Temporary loading remains the MV2 iteration path: `about:debugging#/runtime/this-firefox` → **Load
+Temporary Add-on…** → `extension/manifest.json`. That copy is dropped when Firefox closes, so repeat
+it after every restart; it keeps the stored token for the same extension id. The MCP config and the
+token file survive either way.
 
 The port belongs to one process. opencode starts one MCP server per session, so the first session
 owns `ws://127.0.0.1:8788` and every other session relays its tool calls through it — no tools fail

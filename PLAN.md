@@ -34,7 +34,7 @@ Repo: `/mnt/work/develop/automation/ff-tab-bridge` → `github.com/darideveloper
 | 3 | Hard limits | iframes ✗, privileged pages ✗; **upload ✓, popups ✓, full-page ✓, network errors ✓** |
 | 4 | Uploads | Any readable path, plus a hardcoded refuse for `~/.ssh`, `~/.gnupg`, `~/.aws`, the token file; ~25 MB cap |
 | 5 | Tabs | Several at once → `tabId` on every tool, refs scoped per tab + snapshot generation |
-| 6 | Install | Temporary add-on in `about:debugging` only. No AMO account, no signing, no 2FA |
+| 6 | Install | AMO-signed XPI as an unlisted self-distribution (AMO account, 2FA) installed in the existing Firefox 152 profile: permanent, survives restarts. `about:debugging` temporary loading stays the MV2 iteration fallback. No public listing, no auto-update channel |
 | 7 | Tests | `bun test` for socket/auth/routing, fixture page, plus an in-browser harness in real Firefox |
 | 8 | Attach | Toolbar button only → no `menus` permission, no context menu |
 | 9 | Site access | **Declared** `<all_urls>`: granted at load, no prompt, not revocable per-site (disable the add-on instead). Supersedes "optional, granted on first click", which never worked because Firefox drops the user gesture after an `await` |
@@ -57,7 +57,7 @@ screenshot, console, network, upload`
 
 - `tabs` lists every open tab with an `attached` flag — that is also how the agent finds a popup the
   page opened. No `onCreated` handler, no auto-follow.
-- `attach(tabId)`; `<all_urls>` is a declared permission, so a temporary add-on already has it and no
+- `attach(tabId)`; `<all_urls>` is a declared permission, so the add-on already has it and no
   prompt appears. Any session may attach any supported tab itself.
 - `screenshot` writes a PNG to `/tmp/opencode` and returns the path.
 - `upload(tabId, ref, path)` — server reads the bytes, page builds `File` + `DataTransfer`.
@@ -66,7 +66,7 @@ In Code Mode the tools show up as `tools.ffbridge.<tool>`.
 
 ## Checklist
 
-- [x] p1 Repo at `/mnt/hd/develop/automation/ff-tab-bridge`, `origin` over SSH — [agent]
+- [x] p1 Repo at `/mnt/work/develop/automation/ff-tab-bridge`, `origin` over SSH — [agent]
   - `git init` was already done; origin switched from HTTPS to `git@github.com:…` because `gh` is absent.
 - [x] p2 Dependencies installed — [agent]
   - `@modelcontextprotocol/sdk@1.32.2`, `zod@4.6.7`, `@types/bun`. No scripts, deliberately: none of the
@@ -121,7 +121,8 @@ In Code Mode the tools show up as `tools.ffbridge.<tool>`.
   - Install, token, tool reference, security model, troubleshooting, "reload after a Firefox restart".
   - The README step 5 and the `PERMISSION_NEEDED` row were rewritten once `<all_urls>` became a
     declared permission: there is no grant prompt any more.
-- ~~p20/p21 AMO credentials and signing~~ — **removed** with decision 6.
+- p20/p21 AMO credentials and signing — **removed** with decision 6, then reinstated by the signed
+  XPI install: decision 6 now makes the unlisted signed build the normal install.
 
 ## Environment facts (verified, do not re-litigate)
 
