@@ -41,6 +41,11 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
 - **Upload** — the server reads the bytes, the page builds `File` + `DataTransfer`. Refuses `~/.ssh`,
   `~/.gnupg`, `~/.aws`, the token file, and anything over 25 MB.
 - **wait_for** — text, selector, ref, URL fragment, or disappearance; polls at 100 ms.
+- **Attach marker** — an attached tab draws a fixed `#0060df` frame and a bottom-right pill in a closed
+  shadow root (inline `!important` on the host, so page CSS cannot hide it): the pill names each
+  command while it runs, returns to `attached` after success or error, is re-pushed on attach, detach,
+  page load and re-injection, and is hidden around both capture paths so `snapshot` never lists it and
+  `screenshot` never shows it.
 
 ## Security model
 
@@ -82,9 +87,9 @@ The toolbar mark is `extension/icons/bridge.svg` — a deck over one arch, on a 
 
 - `bun test` — 21 checks: DOM helpers, token handling, origin gate, upload guard, WS auth,
   round-trip, relay and takeover.
-- In-browser self-test (options page, or the `selftest` command) — 13 checks on the fixture:
+- In-browser self-test (options page, or the `selftest` command) — 15 checks on the fixture:
   snapshot, input/keyboard event delivery, console, network, dialog, select, wait_for, upload,
-  screenshot, closed shadow root.
+  screenshot, closed shadow root, overlay mounted and absent from the snapshot.
 - Runtime matrix proven on 2026-11-25: GitHub search, TodoMVC React, Hacker News, full-page capture,
   detach mid-command, tab closed while attached, host death, and a full Firefox restart drill.
 

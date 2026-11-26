@@ -21,6 +21,7 @@ const state = {
   agentReg: null,
   patchesReg: null,
   patchError: null,
+  navigating: new Set(),
 };
 
 function ffbError(code, message) {
@@ -293,10 +294,34 @@ async function agentCall(tabId, cmd, params) {
   } catch (e) {
     await injectInto(tabId, true);
     reply = await browser.tabs.sendMessage(tabId, frame);
+    // The retry means a fresh document: its overlay has to be mounted there too.
+    await pushOverlay(tabId, true);
   }
   if (!reply) throw ffbError('NO_RESPONSE', 'The page did not answer (it may be navigating).');
   if (!reply.ok) throw ffbError(reply.error.code, reply.error.message);
   return reply.result;
+}
+
+// ---- overlay -------------------------------------------------------------
+
+function overlayParams(tabId, attached) {
+  return { attached, busy: state.navigating.has(tabId) ? 'navigate' : null };
+}
+
+// The page draws the marker; this is the only thing that says which tabs and
+// which command. Best effort by design: a document mid-navigation or not yet
+// injected gets it from the next onCompleted push.
+async function pushOverlay(tabId, attached, extra) {
+  if (!state.attached.has(tabId) && attached !== false) return;
+  try {
+    await browser.tabs.sendMessage(tabId, {
+      __ffb: true,
+      cmd: 'overlay',
+      params: Object.assign(overlayParams(tabId, attached), extra || {}),
+    });
+  } catch (e) {
+    /* tab mid-navigation, or the agent is not in this document yet */
+  }
 }
 
 // ---- attach / detach -----------------------------------------------------
@@ -311,10 +336,13 @@ async function attach(tabId) {
   lastError = null;
   updateBadge(tabId);
   broadcastState();
+  await pushOverlay(tabId, true);
   return { tabId, attached: true, title: tab.title || '', url: tab.url || '' };
 }
 
 async function detach(tabId) {
+  // While the lease still holds, so the page accepts the command and drops the marker.
+  if (state.attached.has(tabId)) await pushOverlay(tabId, false);
   const had = state.attached.delete(tabId);
   updateBadge(tabId);
   broadcastState();
@@ -361,7 +389,9 @@ browser.webNavigation.onCompleted.addListener((details) => {
   if (!state.attached.has(details.tabId)) return;
   // Re-inject for documents loaded before registration, and after a reload of
   // the add-on. Skipped when the page already has everything.
-  injectInto(details.tabId).catch(() => {});
+  injectInto(details.tabId)
+    .then(() => pushOverlay(details.tabId, true))
+    .catch(() => {});
 });
 
 browser.tabs.onUpdated.addListener((tabId, info) => {
@@ -389,20 +419,29 @@ function waitForLoad(tabId, timeoutMs) {
 async function navigate(args) {
   const tabId = Number(args.tabId);
   requireAttached(tabId);
-  const loading = waitForLoad(tabId, NAV_TIMEOUT_MS);
-  if (args.url) await browser.tabs.update(tabId, { url: args.url });
-  else if (args.back) await browser.tabs.goBack(tabId);
-  else if (args.forward) await browser.tabs.goForward(tabId);
-  else if (args.reload) await browser.tabs.reload(tabId);
-  else throw ffbError('BAD_ARGS', 'Pass url, back, forward or reload.');
-  const details = await loading;
+  // The document that would show the pill is replaced by the navigation, so the
+  // name comes from here and the onCompleted push re-reads it in the new page.
+  state.navigating.add(tabId);
+  await pushOverlay(tabId, true);
   try {
-    await agentCall(tabId, 'wait_for', { quiet: true, timeoutMs: 5000 });
-  } catch (e) {
-    /* a page may already be quiet, or the agent is not ready yet */
+    const loading = waitForLoad(tabId, NAV_TIMEOUT_MS);
+    if (args.url) await browser.tabs.update(tabId, { url: args.url });
+    else if (args.back) await browser.tabs.goBack(tabId);
+    else if (args.forward) await browser.tabs.goForward(tabId);
+    else if (args.reload) await browser.tabs.reload(tabId);
+    else throw ffbError('BAD_ARGS', 'Pass url, back, forward or reload.');
+    const details = await loading;
+    try {
+      await agentCall(tabId, 'wait_for', { quiet: true, timeoutMs: 5000 });
+    } catch (e) {
+      /* a page may already be quiet, or the agent is not ready yet */
+    }
+    const tab = await browser.tabs.get(tabId);
+    return { tabId, url: (details && details.url) || tab.url, title: tab.title || '' };
+  } finally {
+    state.navigating.delete(tabId);
+    await pushOverlay(tabId, true);
   }
-  const tab = await browser.tabs.get(tabId);
-  return { tabId, url: (details && details.url) || tab.url, title: tab.title || '' };
 }
 
 // ---- screenshots ---------------------------------------------------------
@@ -423,49 +462,56 @@ function sleep(ms) {
 async function screenshot(args) {
   const tabId = Number(args.tabId);
   requireAttached(tabId);
-  if (!args.fullPage) {
-    const dataUrl = await browser.tabs.captureTab(tabId);
-    return { dataUrl, fullPage: false };
+  // The marker is ours, never the page's: a capture shows what the page shows.
+  await pushOverlay(tabId, true, { hidden: true });
+  await sleep(80);
+  try {
+    if (!args.fullPage) {
+      const dataUrl = await browser.tabs.captureTab(tabId);
+      return { dataUrl, fullPage: false };
+    }
+
+    const start = await agentCall(tabId, 'metrics', {});
+    const viewport = start.innerHeight || 800;
+    const pageHeight = Math.min(start.scrollHeight || viewport, viewport * MAX_TILES);
+    const offsets = [];
+    for (let y = 0; y < pageHeight; y += viewport) offsets.push(y);
+
+    const frames = [];
+    for (const y of offsets) {
+      await agentCall(tabId, 'scroll_to', { x: 0, y });
+      await sleep(140);
+      frames.push({ y, dataUrl: await browser.tabs.captureTab(tabId) });
+    }
+    await agentCall(tabId, 'scroll_to', { x: start.scrollX || 0, y: start.scrollY || 0 });
+
+    const images = [];
+    for (const frame of frames) images.push(await loadImage(frame.dataUrl));
+    const scale = images[0].width / (start.innerWidth || images[0].width);
+    const width = Math.round((start.scrollWidth || start.innerWidth) * scale);
+    const height = Math.round(pageHeight * scale);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, width);
+    canvas.height = Math.max(1, height);
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    images.forEach((image, index) => {
+      context.drawImage(image, 0, Math.round(offsets[index] * scale));
+    });
+
+    return {
+      dataUrl: canvas.toDataURL('image/png'),
+      fullPage: true,
+      tiles: images.length,
+      width: canvas.width,
+      height: canvas.height,
+      truncated: (start.scrollHeight || 0) > pageHeight,
+    };
+  } finally {
+    await pushOverlay(tabId, true, { hidden: false });
   }
-
-  const start = await agentCall(tabId, 'metrics', {});
-  const viewport = start.innerHeight || 800;
-  const pageHeight = Math.min(start.scrollHeight || viewport, viewport * MAX_TILES);
-  const offsets = [];
-  for (let y = 0; y < pageHeight; y += viewport) offsets.push(y);
-
-  const frames = [];
-  for (const y of offsets) {
-    await agentCall(tabId, 'scroll_to', { x: 0, y });
-    await sleep(140);
-    frames.push({ y, dataUrl: await browser.tabs.captureTab(tabId) });
-  }
-  await agentCall(tabId, 'scroll_to', { x: start.scrollX || 0, y: start.scrollY || 0 });
-
-  const images = [];
-  for (const frame of frames) images.push(await loadImage(frame.dataUrl));
-  const scale = images[0].width / (start.innerWidth || images[0].width);
-  const width = Math.round((start.scrollWidth || start.innerWidth) * scale);
-  const height = Math.round(pageHeight * scale);
-
-  const canvas = document.createElement('canvas');
-  canvas.width = Math.max(1, width);
-  canvas.height = Math.max(1, height);
-  const context = canvas.getContext('2d');
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, canvas.width, canvas.height);
-  images.forEach((image, index) => {
-    context.drawImage(image, 0, Math.round(offsets[index] * scale));
-  });
-
-  return {
-    dataUrl: canvas.toDataURL('image/png'),
-    fullPage: true,
-    tiles: images.length,
-    width: canvas.width,
-    height: canvas.height,
-    truncated: (start.scrollHeight || 0) > pageHeight,
-  };
 }
 
 // ---- self-test -----------------------------------------------------------
@@ -557,6 +603,18 @@ async function selfTest(args) {
     const shot = await screenshot({ tabId });
     if (!shot.dataUrl || shot.dataUrl.length < 1000) throw new Error('capture looks empty');
     return Math.round(shot.dataUrl.length / 1024) + ' KiB';
+  });
+  await check('overlay mounted', async () => {
+    const marker = await agentCall(tabId, 'overlay', { attached: true });
+    if (!marker.mounted) throw new Error('the overlay is not in the page');
+    if (marker.hidden) throw new Error('the overlay is still hidden after the screenshot');
+    return marker.busy ? 'busy ' + marker.busy : 'idle';
+  });
+  await check('overlay absent from snapshot', async () => {
+    const after = await agentCall(tabId, 'snapshot', {});
+    if (after.text.indexOf('ffb-overlay') !== -1) throw new Error('the overlay host is in the snapshot');
+    if (after.text.indexOf('attached') !== -1) throw new Error('the pill text is in the snapshot');
+    return after.count + ' elements, none of them the overlay';
   });
 
   return { tabId, passed: results.filter((r) => r.ok).length, failed: results.filter((r) => !r.ok).length, results };

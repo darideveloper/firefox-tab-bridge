@@ -111,6 +111,134 @@
     return { role: C.roleOf(el), name: C.nameOf(el) };
   }
 
+  // ---- overlay -------------------------------------------------------------
+  // A fixed frame plus a status pill, drawn inside a closed shadow root: page
+  // CSS cannot select into it, and the host's inline !important declarations
+  // beat any author rule, so page CSS cannot hide it. Ceiling: a transform on
+  // <html> still shifts a fixed layer. A closed root is invisible to the
+  // snapshot walk; shadowRoots() skips it anyway, because the page-world patch
+  // records it in __ffb.shadows.
+
+  var HOST_TAG = 'ffb-overlay';
+  var PILL_IDLE = 'attached';
+  var overlay = null; // { host, root, pill }
+  var overlayState = { busy: null, pulse: 0 };
+
+  var OVERLAY_CSS = [
+    '.frame{position:absolute;inset:0;border:3px solid #0060df;box-sizing:border-box}',
+    '.pill{position:absolute;right:16px;bottom:16px;max-width:60vw;padding:5px 12px;border-radius:999px;',
+    'background:#0060df;color:#fff;font:600 13px/1.4 system-ui,sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.35);',
+    'white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.pill.busy{animation:ffb-pulse .7s ease-in-out infinite}',
+    '@keyframes ffb-pulse{50%{opacity:.55;transform:scale(1.06)}}',
+  ].join('');
+
+  var HOST_STYLE = {
+    position: 'fixed',
+    inset: '0',
+    display: 'block',
+    visibility: 'visible',
+    opacity: '1',
+    margin: '0',
+    padding: '0',
+    border: '0',
+    background: 'transparent',
+    transform: 'none',
+    filter: 'none',
+    'clip-path': 'none',
+    'mix-blend-mode': 'normal',
+    'pointer-events': 'none',
+    overflow: 'visible',
+    transition: 'none',
+    animation: 'none',
+    'z-index': '2147483647',
+  };
+
+  function mountOverlay() {
+    if (overlay && overlay.host.isConnected) return overlay;
+    try {
+      var host = document.createElement(HOST_TAG);
+      host.setAttribute('aria-hidden', 'true');
+      Object.keys(HOST_STYLE).forEach(function (name) {
+        host.style.setProperty(name, HOST_STYLE[name], 'important');
+      });
+      var root = host.attachShadow({ mode: 'closed' });
+      var style = document.createElement('style');
+      style.textContent = OVERLAY_CSS;
+      var frame = document.createElement('div');
+      frame.className = 'frame';
+      var pill = document.createElement('div');
+      pill.className = 'pill';
+      pill.textContent = PILL_IDLE;
+      root.appendChild(style);
+      root.appendChild(frame);
+      root.appendChild(pill);
+      (document.documentElement || document.body).appendChild(host);
+      overlay = { host: host, root: root, pill: pill };
+      return overlay;
+    } catch (e) {
+      overlay = null;
+      return null;
+    }
+  }
+
+  function renderOverlay() {
+    if (!overlay) return;
+    overlay.pill.textContent = overlayState.busy || PILL_IDLE;
+    overlay.pill.className = overlayState.busy ? 'pill busy' : 'pill';
+  }
+
+  // A command can finish in a few milliseconds; hold the label long enough to
+  // be seen, and let a newer command win over the pending reset.
+  function setBusy(name) {
+    if (!overlay) return;
+    var token = ++overlayState.pulse;
+    if (name) {
+      overlayState.busy = String(name);
+      renderOverlay();
+      return;
+    }
+    if (!overlayState.busy) return;
+    setTimeout(function () {
+      if (overlayState.pulse !== token) return;
+      overlayState.busy = null;
+      renderOverlay();
+    }, 260);
+  }
+
+  function overlayCommand(params) {
+    params = params || {};
+    if (params.attached === false) {
+      if (overlay) {
+        try {
+          overlay.host.remove();
+        } catch (e) {
+          /* host already gone */
+        }
+      }
+      overlay = null;
+      overlayState.pulse += 1;
+      overlayState.busy = null;
+      return { mounted: false };
+    }
+    var live = mountOverlay();
+    if (!live) return { mounted: false };
+    var hidden = params.hidden === true;
+    live.host.style.setProperty('display', hidden ? 'none' : 'block', 'important');
+    if (Object.prototype.hasOwnProperty.call(params, 'busy')) setBusy(params.busy);
+    return { mounted: true, hidden: hidden, busy: overlayState.busy };
+  }
+
+  function isOverlayRoot(root) {
+    if (!root) return true;
+    if (overlay && root === overlay.root) return true;
+    try {
+      return String(root.host && root.host.tagName).toLowerCase() === HOST_TAG;
+    } catch (e) {
+      return false;
+    }
+  }
+
   // ---- snapshot ------------------------------------------------------------
 
   function shadowRoots() {
@@ -119,7 +247,8 @@
       var walk = function (root) {
         var all = root.querySelectorAll('*');
         for (var i = 0; i < all.length; i++) {
-          if (all[i].shadowRoot) {
+          if (overlay && all[i] === overlay.host) continue;
+          if (all[i].shadowRoot && !isOverlayRoot(all[i].shadowRoot)) {
             roots.push(all[i].shadowRoot);
             walk(all[i].shadowRoot);
           }
@@ -134,7 +263,7 @@
       try {
         for (var i = 0; i < p.shadows.length; i++) {
           var root = p.shadows[i] && p.shadows[i].root;
-          if (!root) continue;
+          if (!root || isOverlayRoot(root)) continue;
           var known = false;
           for (var j = 0; j < roots.length; j++) if (roots[j] === root) known = true;
           if (!known) roots.push(root);
@@ -536,6 +665,7 @@
   }
 
   var handlers = {
+    overlay: overlayCommand,
     snapshot: snapshot,
     click: click,
     type: type,
@@ -581,14 +711,20 @@
     if (!handler) {
       return Promise.resolve({ ok: false, error: { code: 'UNKNOWN_COMMAND', message: 'Unknown command ' + message.cmd } });
     }
+    // The pill names whatever runs and pulses while it runs; `overlay` is the
+    // push that draws it, never something the user is waiting on.
+    var busy = message.cmd !== 'overlay';
+    if (busy) setBusy(message.cmd);
     return Promise.resolve()
       .then(function () {
         return handler(message.params || {});
       })
       .then(function (result) {
+        if (busy) setBusy(null);
         return { ok: true, result: result };
       })
       .catch(function (error) {
+        if (busy) setBusy(null);
         return { ok: false, error: { code: (error && error.code) || 'ERROR', message: String((error && error.message) || error) } };
       });
   });
