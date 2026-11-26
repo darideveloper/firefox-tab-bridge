@@ -59,7 +59,7 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
 ## Install and operations
 
 1. `bun install`; `bun run server` once to create the token.
-2. Install the AMO-signed XPI — `dist/ff-tab-bridge-1.0.0.xpi`, unlisted self-distribution — and
+2. Install the AMO-signed XPI — `dist/ff-tab-bridge-1.1.0.xpi`, unlisted self-distribution — and
    confirm ff-tab-bridge is enabled; it survives a full Firefox restart with its token. Loading
    `extension/manifest.json` as a temporary add-on from `about:debugging` stays the MV2 iteration
    path and is dropped when Firefox closes.

@@ -45,14 +45,14 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
 3. Pack the add-on. `manifest.json` must sit at the archive root, so zip from inside `extension/`:
 
    ```bash
-   mkdir -p dist && cd extension && zip -r -X ../dist/ff-tab-bridge-1.0.0.xpi . -x '.*' && cd ..
+   mkdir -p dist && cd extension && zip -r -X ../dist/ff-tab-bridge-1.1.0.xpi . -x '.*' && cd ..
    ```
 
    `dist/` is ignored by git; the archive is a build output, never committed.
 
 4. Sign it at the [AMO Developer Hub](https://addons.mozilla.org/developers/) → **Submit a New
    Add-on** → **On your own** (unlisted, self-distribution) → upload
-   `dist/ff-tab-bridge-1.0.0.xpi` → download the signed copy. The signature covers the version, so
+   `dist/ff-tab-bridge-1.1.0.xpi` → download the signed copy. The signature covers the version, so
    every manifest change needs a new upload.
 
 5. Install the signed XPI: open the downloaded file in Firefox and confirm the prompt, or use
