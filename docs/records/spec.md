@@ -64,6 +64,10 @@ opencode ──stdio──> server/server.ts ──ws://127.0.0.1:8788──> ex
 Port sharing: the first opencode session to start owns 8788, the rest relay; if the owner exits, a
 survivor takes the port and the add-on reconnects within about five seconds.
 
+The toolbar mark is `extension/icons/bridge.svg` — a deck over one arch, on a 16px grid, one
+`#0060df` accent, 1px safe padding — with `icon-16/32/48/96.png` exported beside it and wired as
+`icons` plus `browser_action.default_icon`, so Firefox shows it instead of the puzzle piece.
+
 ## Known limits
 
 - `isTrusted` is false on everything dispatched; a site gating on it is reported, never worked around.

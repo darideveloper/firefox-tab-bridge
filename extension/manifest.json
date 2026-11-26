@@ -3,6 +3,12 @@
   "name": "ff-tab-bridge",
   "version": "0.1.0",
   "description": "Local bridge that lets opencode drive an attached Firefox tab.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  },
   "browser_specific_settings": {
     "gecko": {
       "id": "ff-tab-bridge@darideveloper",
@@ -24,7 +30,13 @@
     "persistent": true
   },
   "browser_action": {
-    "default_title": "Attach or detach this tab (ff-tab-bridge)"
+    "default_title": "Attach or detach this tab (ff-tab-bridge)",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    }
   },
   "options_ui": {
     "page": "options/options.html",
