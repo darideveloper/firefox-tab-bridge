@@ -42,5 +42,9 @@
     "page": "options/options.html",
     "open_in_tab": true
   },
-  "web_accessible_resources": ["patches.js"]
+  "web_accessible_resources": ["patches.js"],
+  "sidebar_action": {
+    "default_panel": "sidebar/panel.html",
+    "default_title": "opencode"
+  }
 }

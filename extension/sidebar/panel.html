@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>opencode</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --line: #c9c9c9;
+        --muted: #6b6b6b;
+        --bad: #a61e1e;
+      }
+      html,
+      body {
+        height: 100%;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        font: 13px/1.4 system-ui, sans-serif;
+        margin: 0;
+      }
+      .bar {
+        align-items: center;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        padding: 0.4rem;
+      }
+      input {
+        box-sizing: border-box;
+        flex: 1 1 10rem;
+        font: inherit;
+        min-width: 0;
+        padding: 0.3rem 0.4rem;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+      }
+      button {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        cursor: pointer;
+        font: inherit;
+        padding: 0.3rem 0.6rem;
+      }
+      button.primary {
+        background: #1c7ed6;
+        border-color: #1c7ed6;
+        color: #fff;
+      }
+      #note {
+        color: var(--muted);
+        margin: 0;
+        padding: 0 0.4rem 0.3rem;
+      }
+      #note.bad {
+        color: var(--bad);
+      }
+      #note:empty {
+        display: none;
+      }
+      #frame {
+        border: 0;
+        flex: 1 1 auto;
+        min-height: 0;
+        width: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <input id="url" type="url" spellcheck="false" autocomplete="off" placeholder="http://127.0.0.1:PORT" />
+      <button class="primary" id="load">Load</button>
+      <button id="retry">Retry</button>
+    </div>
+    <p id="note"></p>
+    <iframe id="frame" title="opencode"></iframe>
+    <script src="panel.js"></script>
+  </body>
+</html>
