@@ -36,6 +36,7 @@ Repo: `/mnt/work/develop/automation/ff-tab-bridge` → `github.com/darideveloper
 | 6 | Install | Temporary add-on in `about:debugging` only. No AMO account, no signing, no 2FA |
 | 7 | Tests | `bun test` for socket/auth/routing, fixture page, plus an in-browser harness in real Firefox |
 | 8 | Attach | Toolbar button only → no `menus` permission, no context menu |
+| 9 | Site access | **Declared** `<all_urls>`: granted at load, no prompt, not revocable per-site (disable the add-on instead). Supersedes "optional, granted on first click", which never worked because Firefox drops the user gesture after an `await` |
 
 ## What I need from you
 
@@ -71,7 +72,7 @@ In Code Mode the tools show up as `tools.ffbridge.<tool>`.
     targets exist yet.
 - [x] p3 MV2 manifest with stable gecko id — [agent]
   - `persistent: true`, `strict_min_version 128.0`, `storage/tabs/activeTab/webNavigation`,
-    `optional_permissions: ["<all_urls>"]` (MV2 name), no `menus`, **no custom CSP** (the MV2 default
+    `<all_urls>` in `permissions` (see decision 9), no `menus`, **no custom CSP** (the MV2 default
     already allows `ws://127.0.0.1`), `data_collection_permissions: ["websiteContent"]`.
 - [x] p4 Options page that stores token and port — [agent]
   - Stub HTML/JS only. `storage.local`, connection state and token input come with the server story.

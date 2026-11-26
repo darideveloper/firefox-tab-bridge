@@ -17,7 +17,7 @@ function renderStatus(status) {
   statusLine.innerHTML =
     'socket: <strong class="' + (status.ready ? 'ok' : 'bad') + '">' + socket + '</strong> · ' +
     'port: ' + status.port + ' · ' +
-    'site access: ' + (status.permission ? 'granted' : 'not granted (click the toolbar button)') + ' · ' +
+    'site access: ' + (status.permission ? 'granted' : 'missing — reload the add-on from about:debugging') + ' · ' +
     'attached tabs: ' + attached +
     (status.patchError ? ' · patch: <span class="bad">' + status.patchError + '</span>' : '') +
     (status.lastError

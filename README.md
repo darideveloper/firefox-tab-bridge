@@ -118,6 +118,10 @@ Refs are valid for one snapshot. Pass the `snapshot` number back with a command 
   tool asks for it, and goes only to the local MCP server.
 - Synthetic events are `isTrusted: false`. No site is tricked into believing otherwise; a site that
   checks gets reported, not worked around.
+- Site access is a **required** permission, so `about:addons` offers no per-site toggle: to withdraw
+  it you disable or remove the add-on, which also closes the socket. The alternative — an optional
+  grant requested on first click — never worked here, because Firefox ignores
+  `permissions.request()` after an `await` in the click handler.
 - Upload is deliberately narrow: explicit deny list, regular files only, 25 MB cap.
 
 ## Troubleshooting
@@ -128,7 +132,7 @@ Refs are valid for one snapshot. Pass the `snapshot` number back with a command 
 | `NOT_CONNECTED` | opencode started the server but the add-on has not authenticated yet. Load the add-on and save the token. |
 | Tools missing in one opencode window | Fixed: that window relays through the session that owns port 8788. Check the server line in `~/.local/share/opencode/log/opencode.log`: it reads `sharing the bridge at ws://127.0.0.1:8788` when relaying. |
 | `PERMISSION_NEEDED` | Site access was not granted; reload the add-on from `about:debugging` (it is a declared permission, so a fresh load always has it). |
-| `TAB_NOT_ATTACHED` | Attach the tab (toolbar click, or the `attach` tool after the grant). |
+| `TAB_NOT_ATTACHED` | Attach the tab (toolbar click, or the `attach` tool). |
 | `NO_RESPONSE` / `INJECT_FAILED` | The tab is privileged (`about:`, `view-source:`, add-on pages) or was closed mid-command. |
 | `TIMEOUT` | A page left a dialog open or blocked the event loop. `screenshot` and `navigate` allow longer. |
 | `console`/`network` empty | The page-world patch was blocked by the site's CSP, or the document loaded before registration — reload the tab once and retry. |
