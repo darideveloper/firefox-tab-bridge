@@ -27,3 +27,7 @@ Shipped: hand-authored `bridge.svg` (16px grid, one `#0060df`, 1px padding) with
 
 ## in-page-attach-indicator — 2026-11-25
 Shipped: every attached tab carries a closed-shadow marker — a 2px `#0060df` frame and a bottom-right capsule that names the running command and pulses — hidden around both capture paths so `snapshot` and screenshots stay clean.
+
+## permanent-install-signed-xpi — 2026-11-25
+Shipped: the add-on now installs from an AMO-signed XPI (1.0.0, unlisted "On your own") and survives a Firefox restart with its token, while `about:debugging` stays the MV2 iteration path.
+Decided: docs/decisions/0004-signed-xpi-install.md.
